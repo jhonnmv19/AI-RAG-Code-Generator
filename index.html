@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador RAG - Supabase & Ollama</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; margin: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        textarea { width: 100%; height: 120px; background: #1e1e1e; color: #fff; border: 1px solid #333; border-radius: 6px; padding: 10px; box-sizing: border-box; }
+        button { background: #007acc; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; margin-right: 10px; }
+        button:hover { background: #005999; }
+        .btn-vscode { background: #3c3c3c; border: 1px solid #007acc; }
+        .btn-vscode:hover { background: #007acc; }
+        .panel { background: #1e1e1e; padding: 15px; border-radius: 8px; border: 1px solid #333; height: 600px; display: flex; flex-direction: column; }
+        .panel h3 { margin-top: 0; }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        pre { flex:1; overflow:auto; background:#000; padding:10px; border-radius:4px; white-space:pre-wrap; word-break:break-word; }
+        iframe { flex:1; width:100%; border:none; border-radius:6px; }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 RAG Code Generator (Qwen + Reranker)</h1>
+    <p>Describe el sistema o consulta que deseas realizar sobre tus tablas de estudiantes y materias:</p>
+    
+    <div style="margin-bottom: 20px;">
+        <textarea id="promptInput" placeholder="Ej: Hazme un sistema para inscribir un estudiante nuevo en la materia de Programación 1 usando un formulario elegante..."></textarea>
+        <br><br>
+        <button onclick="enviarPregunta()">Generar Sistema</button>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <div class="panel-header">
+                <h3>Código Generado</h3>
+                <button id="btnVSCode" class="btn-vscode" onclick="abrirEnVSCode()" style="display: none;">💻 Abrir en VS Code</button>
+            </div>
+            <pre id="codigoSalida">El código aparecerá aquí...</pre>
+        </div>
+
+        <div class="panel">
+            <h3>Vista Previa Ejecutable Live</h3>
+            <iframe id="previewFrame"></iframe>
+        </div>
+    </div>
+
+    <script>
+        let ultimoCodigoGenerado = ""; // Variable global para almacenar el código
+
+        async function enviarPregunta() {
+            const prompt = document.getElementById('promptInput').value;
+            const codigoSalida = document.getElementById('codigoSalida');
+            const previewFrame = document.getElementById('previewFrame');
+            const btnVSCode = document.getElementById('btnVSCode');
+
+            codigoSalida.textContent = "Procesando RAG, recuperando esquemas de Supabase, reordenando con el Re-ranker y generando código con Qwen2.5-Coder (esto puede tardar unos segundos)...";
+            btnVSCode.style.display = "none";
+
+            try {
+                const response = await fetch('http://localhost:3000/api/preguntar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pregunta: prompt })
+                });
+
+                const data = await response.json();
+                
+                let codigoRaw = data.respuesta;
+                const match = codigoRaw.match(/```html([\s\S]*?)```/) || codigoRaw.match(/```([\s\S]*?)```/);
+                const codigoLimpio = match ? match[1].trim() : codigoRaw;
+
+                ultimoCodigoGenerado = codigoLimpio; 
+                codigoSalida.textContent = codigoLimpio;
+
+                // Mostrar el botón una vez que el código esté listo
+                btnVSCode.style.display = "inline-block";
+
+                const blob = new Blob([codigoLimpio], { type: 'text/html' });
+                previewFrame.src = URL.createObjectURL(blob);
+
+            } catch (error) {
+                codigoSalida.textContent = "Error al conectar con el servidor backend: " + error.message;
+            }
+        }
+
+        // NUEVA FUNCIÓN PARA ENVIAR EL CÓDIGO AL BACKEND Y ABRIR VS CODE
+        async function abrirEnVSCode() {
+            if (!ultimoCodigoGenerado) return alert("No hay código generado aún.");
+
+            try {
+                const response = await fetch('http://localhost:3000/api/abrir-vscode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ codigo: ultimoCodigoGenerado })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+                
+                console.log("Comando enviado a VS Code exitosamente.");
+            } catch (error) {
+                alert("Error al intentar abrir VS Code: " + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
